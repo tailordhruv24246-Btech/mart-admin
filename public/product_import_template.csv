@@ -1,4 +1,0 @@
-name,sku,barcode,category,subcategory,unit,brand,description,hsn_code,reorder_level,is_active,attributes_json,attribute_color,attribute_size,attribute_weight
-Samsung Galaxy S24,SAM-S24,8901001001,Electronics,Smartphones,pcs,Samsung,Latest flagship,85171300,5,1,"{""ram"":""12GB"",""storage"":""256GB""}",Black,256GB,167g
-Amul Milk 1L,AMUL-MLK-1L,8901234567890,Groceries,Dairy,packet,Amul,Full cream milk,04012000,30,1,"{""fat"":""6%""}",,1L,1000ml
-Parle G 250g,PARLE-G-250,8901719000012,Groceries,Biscuits,pack,Parle,Tea time biscuit,19053100,40,1,"{""flavor"":""classic""}",,250g,250g
