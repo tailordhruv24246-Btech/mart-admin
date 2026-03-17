@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { toast } from 'react-toastify';
-import { getPOSProducts, createPOSSale, openWhatsAppMessage } from '../api';
+import { getPOSProducts, createPOSSale } from '../api';
+import openWhatsAppMessage from '../utils/openWhatsAppMessage';
 import { RiSearchLine, RiBarcodeLine, RiUserLine, RiPhoneLine, RiShoppingCartLine, RiSubtractLine, RiAddLine, RiDeleteBinLine, RiCloseLine, RiPrinterLine } from 'react-icons/ri';
 import Header from '../Components/Header';
 
