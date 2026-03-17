@@ -1,10 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
-import Header from '../Components/Header'
-import { getPOSProducts, createPOSSale } from '../api/endpoints'
-import { UPLOADS_BASE_URL } from '../api/config'
-import { RiSearchLine, RiAddLine, RiSubtractLine, RiDeleteBinLine, RiPrinterLine, RiBarcodeLine, RiShoppingCartLine, RiCloseLine, RiUserLine, RiPhoneLine } from 'react-icons/ri'
-import toast from 'react-hot-toast'
-import { openWhatsAppMessage } from '../utils/whatsapp'
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 
 const NO_PRODUCT_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="240" height="180" viewBox="0 0 240 180"><rect width="240" height="180" fill="#f1f5f9"/><rect x="20" y="20" width="200" height="140" rx="14" fill="#e2e8f0"/><circle cx="88" cy="76" r="14" fill="#cbd5e1"/><path d="M44 134l34-34 28 28 18-18 32 24H44z" fill="#94a3b8"/></svg>`)}`
 
@@ -21,6 +15,8 @@ export default function POS() {
   const [selectedSubCategory, setSelectedSubCategory] = useState('')
   const [invoiceModal, setInvoiceModal] = useState(false)
   const [lastSale, setLastSale] = useState(null)
+  const [attributeModal, setAttributeModal] = useState({ open: false, product: null })
+  const [selectedAttribute, setSelectedAttribute] = useState('')
   const searchRef = useRef()
   const barcodeRef = useRef()
   const customerNameRef = useRef()
@@ -169,24 +165,74 @@ export default function POS() {
       || String(p.subcategoryName || '').toLowerCase().includes(query)
   })
 
-  const addToCart = (product) => {
+  // Helper: get unique attribute values for a product
+  const getProductAttributes = (product) => {
+    // attributes: [{key, value}] or attributes_map
+    if (Array.isArray(product.attributes) && product.attributes.length > 0) {
+      // If multiple attributes, group by key
+      const attrMap = {};
+      product.attributes.forEach(attr => {
+        if (!attrMap[attr.key]) attrMap[attr.key] = new Set();
+        attrMap[attr.key].add(attr.value);
+      });
+      return attrMap;
+    }
+    // fallback: attributes_map
+    if (product.attributes_map && typeof product.attributes_map === 'object') {
+      return Object.entries(product.attributes_map).reduce((acc, [k, v]) => {
+        acc[k] = new Set([v]);
+        return acc;
+      }, {});
+    }
+    return {};
+  };
+
+  // Helper: get all attribute value options (for modal)
+  const getAttributeOptions = (product) => {
+    // For now, support only one attribute (like size/weight)
+    if (Array.isArray(product.attributes) && product.attributes.length > 0) {
+      // Find unique keys
+      const keys = [...new Set(product.attributes.map(a => a.key))];
+      if (keys.length === 1) {
+        const key = keys[0];
+        const values = [...new Set(product.attributes.map(a => a.value))];
+        return { key, values };
+      }
+    }
+    // fallback: no attribute
+    return null;
+  };
+
+  // Add to cart with attribute selection
+  const addToCart = (product, attrValue = null) => {
+    // If product has attribute options and no attrValue selected, open modal
+    const attrOptions = getAttributeOptions(product);
+    if (attrOptions && !attrValue) {
+      setAttributeModal({ open: true, product });
+      setSelectedAttribute('');
+      return;
+    }
+    // Add to cart with attribute_value
     setCart(prev => {
-      const ex = prev.find(c => c.id === product.id)
+      // Find by id + attribute_value
+      const ex = prev.find(c => c.id === product.id && c.attribute_value === (attrValue || ''));
       if (ex) {
         if (ex.qty >= product.stock) { toast.error('Out of stock'); return prev }
-        return prev.map(c => c.id === product.id ? { ...c, qty: c.qty + 1 } : c)
+        return prev.map(c => (c.id === product.id && c.attribute_value === (attrValue || '')) ? { ...c, qty: c.qty + 1 } : c)
       }
       if (product.stock <= 0) { toast.error('Out of stock'); return prev }
-      return [...prev, { ...product, qty: 1 }]
+      return [...prev, { ...product, qty: 1, attribute_value: attrValue || '' }]
     })
+    setAttributeModal({ open: false, product: null });
+    setSelectedAttribute('');
   }
 
-  const updateQty = (id, qty) => {
-    if (qty <= 0) { removeItem(id); return }
-    setCart(prev => prev.map(c => c.id === id ? { ...c, qty } : c))
+  const updateQty = (id, qty, attribute_value = '') => {
+    if (qty <= 0) { removeItem(id, attribute_value); return }
+    setCart(prev => prev.map(c => (c.id === id && c.attribute_value === (attribute_value || '')) ? { ...c, qty } : c))
   }
 
-  const removeItem = (id) => setCart(prev => prev.filter(c => c.id !== id))
+  const removeItem = (id, attribute_value = '') => setCart(prev => prev.filter(c => !(c.id === id && c.attribute_value === (attribute_value || ''))))
 
   const handleBarcode = (e) => {
     if (e.key === 'Enter') {
@@ -213,7 +259,7 @@ export default function POS() {
     try {
       const saleData = {
         customer_id: null,
-        items: cart.map(c => ({ product_id: c.id, quantity: c.qty, tax_rate: c.gstRate || 0 })),
+        items: cart.map(c => ({ product_id: c.id, quantity: c.qty, tax_rate: c.gstRate || 0, attribute_value: c.attribute_value || undefined })),
         payment_method: payMethod.toLowerCase(),
         paid_amount: grandTotal,
         notes: customer.phone ? `Customer: ${customer.name} (${customer.phone})` : `Customer: ${customer.name}`,
@@ -454,20 +500,60 @@ export default function POS() {
               </div>
             )}
             {cart.map(c => (
-              <div key={c.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+              <div key={c.id + (c.attribute_value || '')} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-900 truncate">{c.name}</p>
+                  <p className="text-sm font-semibold text-slate-900 truncate">{c.name} {c.attribute_value && <span className="ml-1 text-xs text-indigo-600 font-bold">[{c.attribute_value}]</span>}</p>
                   <p className="text-xs text-slate-400">₹{c.price} × {c.qty} = <strong className="text-slate-700">₹{(c.price*c.qty).toLocaleString('en-IN')}</strong></p>
                   <p className="text-xs text-slate-400">GST {c.gstRate}%</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => updateQty(c.id, c.qty-1)} className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-100"><RiSubtractLine className="text-sm" /></button>
+                  <button onClick={() => updateQty(c.id, c.qty-1, c.attribute_value)} className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-100"><RiSubtractLine className="text-sm" /></button>
                   <span className="w-8 text-center text-sm font-bold">{c.qty}</span>
-                  <button onClick={() => updateQty(c.id, c.qty+1)} className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-100"><RiAddLine className="text-sm" /></button>
+                  <button onClick={() => updateQty(c.id, c.qty+1, c.attribute_value)} className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-100"><RiAddLine className="text-sm" /></button>
                 </div>
-                <button onClick={() => removeItem(c.id)} className="text-red-400 hover:text-red-600 p-1"><RiDeleteBinLine /></button>
+                <button onClick={() => removeItem(c.id, c.attribute_value)} className="text-red-400 hover:text-red-600 p-1"><RiDeleteBinLine /></button>
               </div>
             ))}
+                {/* Attribute Selection Modal */}
+                {attributeModal.open && attributeModal.product && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden">
+                      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                        <h2 className="text-lg font-bold">Select Attribute</h2>
+                        <button onClick={() => setAttributeModal({ open: false, product: null })} className="p-2 rounded-xl hover:bg-slate-100"><RiCloseLine /></button>
+                      </div>
+                      <div className="p-6">
+                        {(() => {
+                          const attrOptions = getAttributeOptions(attributeModal.product);
+                          if (!attrOptions) return <div>No attributes found.</div>;
+                          return (
+                            <div>
+                              <div className="mb-2 text-sm font-semibold text-slate-700">{attrOptions.key}:</div>
+                              <div className="flex flex-wrap gap-2">
+                                {attrOptions.values.map(val => (
+                                  <button
+                                    key={val}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${selectedAttribute === val ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                                    onClick={() => setSelectedAttribute(val)}
+                                  >
+                                    {val}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        <button
+                          className="btn-primary w-full mt-6"
+                          disabled={!selectedAttribute}
+                          onClick={() => addToCart(attributeModal.product, selectedAttribute)}
+                        >
+                          Add to Cart
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
           </div>
 
           {/* Summary */}
