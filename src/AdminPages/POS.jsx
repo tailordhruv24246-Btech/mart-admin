@@ -1,4 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { toast } from 'react-toastify';
+import { getPOSProducts, createPOSSale, openWhatsAppMessage } from '../api';
+import { RiSearchLine, RiBarcodeLine, RiUserLine, RiPhoneLine, RiShoppingCartLine, RiSubtractLine, RiAddLine, RiDeleteBinLine, RiCloseLine, RiPrinterLine } from 'react-icons/ri';
+import Header from '../Components/Header';
 
 const NO_PRODUCT_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="240" height="180" viewBox="0 0 240 180"><rect width="240" height="180" fill="#f1f5f9"/><rect x="20" y="20" width="200" height="140" rx="14" fill="#e2e8f0"/><circle cx="88" cy="76" r="14" fill="#cbd5e1"/><path d="M44 134l34-34 28 28 18-18 32 24H44z" fill="#94a3b8"/></svg>`)}`
 
